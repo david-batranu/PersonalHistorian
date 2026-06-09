@@ -1,0 +1,75 @@
+name: PersonalHistorian
+options:
+  bundleIdPrefix: com.personalhistorian
+  deploymentTarget:
+    macOS: "14.0"
+  xcodeVersion: "15.0"
+  createIntermediateGroups: true
+
+packages:
+  GRDB:
+    url: https://github.com/groue/GRDB.swift.git
+    from: "6.24.0"
+
+targets:
+  PersonalHistorian:
+    type: application
+    platform: macOS
+    sources:
+      - PersonalHistorian
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.personalhistorian.app
+        INFOPLIST_FILE: PersonalHistorian/Info.plist
+        CODE_SIGN_ENTITLEMENTS: PersonalHistorian/PersonalHistorian.entitlements
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGNING_ALLOWED: "YES"
+        SWIFT_STRICT_CONCURRENCY: complete
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+    dependencies:
+      - package: GRDB
+    entitlements:
+      path: PersonalHistorian/PersonalHistorian.entitlements
+
+  PersonalHistorianTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests/PersonalHistorianTests
+    dependencies:
+      - target: PersonalHistorian
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.personalhistorian.tests
+        GENERATE_INFOPLIST_FILE: "YES"
+
+  PersonalHistorianE2ETests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests/PersonalHistorianE2ETests
+    dependencies:
+      - target: PersonalHistorian
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.personalhistorian.e2etests
+        GENERATE_INFOPLIST_FILE: "YES"
+
+schemes:
+  PersonalHistorian:
+    build:
+      targets:
+        PersonalHistorian: all
+    run:
+      config: Debug
+    test:
+      targets:
+        - PersonalHistorianTests
+        - PersonalHistorianE2ETests
+  PersonalHistorianE2E:
+    build:
+      targets:
+        PersonalHistorian: all
+    test:
+      targets:
+        - PersonalHistorianE2ETests

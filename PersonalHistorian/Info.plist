@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Hide from Dock — menu bar only -->
+    <key>LSUIElement</key>
+    <true/>
+
+    <key>CFBundleName</key>
+    <string>Personal Historian</string>
+    <key>CFBundleDisplayName</key>
+    <string>Personal Historian</string>
+    <key>CFBundleIdentifier</key>
+    <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.1.0</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleExecutable</key>
+    <string>$(EXECUTABLE_NAME)</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>$(MACOSX_DEPLOYMENT_TARGET)</string>
+
+    <!-- Screen Recording usage description (shown in System Settings) -->
+    <key>NSScreenCaptureUsageDescription</key>
+    <string>Personal Historian captures periodic screenshots to build a searchable history of your activity.</string>
+</dict>
+</plist>
