@@ -49,6 +49,30 @@ final class DatabaseManager: Sendable {
         }
     }
     
+    func insertSession(bundleId: String, appName: String, startTime: Date, endTime: Date) throws {
+        try dbPool?.write { db in
+            try db.execute(sql: """
+                INSERT INTO usage_sessions (bundleId, appName, startTime, endTime)
+                VALUES (?, ?, ?, ?)
+            """, arguments: [bundleId, appName, startTime, endTime])
+        }
+    }
+    
+    func fetchAppUsage(for dateString: String) throws -> [AppUsageRecord] {
+        // Aggregate sessions for the given date
+        guard let dbPool = dbPool else { return [] }
+        return try dbPool.read { db in
+            let sql = """
+                SELECT date(startTime, 'localtime') as date, bundleId, appName, SUM(CAST((strftime('%s', endTime) - strftime('%s', startTime)) AS INTEGER)) as durationSeconds
+                FROM usage_sessions
+                WHERE date(startTime, 'localtime') = ?
+                GROUP BY bundleId, appName
+                ORDER BY durationSeconds DESC
+            """
+            return try AppUsageRecord.fetchAll(db, sql: sql, arguments: [dateString])
+        }
+    }
+    
     private static var migrator: DatabaseMigrator {
         var migrator = DatabaseMigrator()
         migrator.registerMigration("v1") { db in
@@ -69,6 +93,32 @@ final class DatabaseManager: Sendable {
                 t.column("foregroundApp")
             }
         }
+        
+        migrator.registerMigration("v2") { db in
+            try db.create(table: "app_usage") { t in
+                t.column("date", .text).notNull()
+                t.column("appName", .text).notNull()
+                t.column("bundleId", .text).notNull()
+                t.column("durationSeconds", .integer).notNull().defaults(to: 0)
+                t.primaryKey(["date", "bundleId"])
+            }
+        }
+        
+        migrator.registerMigration("v3") { db in
+            try db.create(index: "idx_snapshots_timestamp", on: "snapshots", columns: ["timestamp"])
+            try db.create(index: "idx_snapshots_bundleId", on: "snapshots", columns: ["appBundleId"])
+        }
+        
+        migrator.registerMigration("v4") { db in
+            try db.create(table: "usage_sessions") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("bundleId", .text).notNull()
+                t.column("appName", .text).notNull()
+                t.column("startTime", .datetime).notNull()
+                t.column("endTime", .datetime).notNull()
+            }
+        }
+        
         return migrator
     }
 }

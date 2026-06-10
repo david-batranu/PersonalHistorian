@@ -7,6 +7,7 @@ build: generate
 	xcodebuild -project PersonalHistorian.xcodeproj \
 		-scheme PersonalHistorian \
 		-configuration Debug \
+		SYMROOT=build \
 		build
 
 run: build
@@ -15,3 +16,6 @@ run: build
 clean:
 	xcodebuild clean -project PersonalHistorian.xcodeproj -scheme PersonalHistorian
 	rm -rf build
+
+test: generate
+	xcodebuild test -project PersonalHistorian.xcodeproj -scheme PersonalHistorian -destination 'platform=macOS'

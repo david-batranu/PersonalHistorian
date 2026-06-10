@@ -1,24 +1,38 @@
 import SwiftUI
 
-class AppDelegate: NSObject, NSApplicationDelegate {
-    var appState: AppState?
-
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        appState = AppState()
-    }
-}
-
 @main
 struct PersonalHistorianApp: App {
-    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @State private var appState = AppState()
+    
+    // Using an AppDelegate to hide from dock is handled by LSUIElement in Info.plist,
+    // but we can add window observations here if needed.
 
     var body: some Scene {
-        MenuBarExtra("Personal Historian", systemImage: "clock") {
-            Button("Quit") {
-                NSApplication.shared.terminate(nil)
-            }
-            .keyboardShortcut("q")
+        MenuBarExtra("Personal Historian", systemImage: "clock.arrow.circlepath") {
+            MenuBarView()
+                .environment(appState)
         }
-        .defaultSize(width: 400, height: 300)
+        .menuBarExtraStyle(.window)
+
+        Window("Personal Historian", id: "main") {
+            MainView()
+                .environment(appState)
+        }
+        .defaultSize(width: 1000, height: 700)
+
+        Settings {
+            SettingsView()
+                .environment(appState)
+        }
+        
+        Window("Permission Guide", id: "permissions") {
+            PermissionGuideView {
+                if appState.checkPermissions() == .granted {
+                    appState.startRecording()
+                }
+            }
+            .environment(appState)
+        }
+        .windowResizability(.contentSize)
     }
 }

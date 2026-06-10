@@ -43,18 +43,6 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.personalhistorian.tests
         GENERATE_INFOPLIST_FILE: "YES"
 
-  PersonalHistorianE2ETests:
-    type: bundle.unit-test
-    platform: macOS
-    sources:
-      - Tests/PersonalHistorianE2ETests
-    dependencies:
-      - target: PersonalHistorian
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.personalhistorian.e2etests
-        GENERATE_INFOPLIST_FILE: "YES"
-
 schemes:
   PersonalHistorian:
     build:
@@ -65,11 +53,3 @@ schemes:
     test:
       targets:
         - PersonalHistorianTests
-        - PersonalHistorianE2ETests
-  PersonalHistorianE2E:
-    build:
-      targets:
-        PersonalHistorian: all
-    test:
-      targets:
-        - PersonalHistorianE2ETests

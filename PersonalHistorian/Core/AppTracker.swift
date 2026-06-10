@@ -10,6 +10,9 @@ final class AppTracker {
     private let configuration: Configuration
     private let logger = Logger(subsystem: "com.personalhistorian.app", category: "AppTracker")
     private var isTracking = false
+    private var currentSessionStartTime: Date?
+    
+    weak var appState: AppState?
     
     init(configuration: Configuration = Configuration()) {
         self.configuration = configuration
@@ -52,7 +55,7 @@ final class AppTracker {
     func startTracking() {
         guard !isTracking else { return }
         isTracking = true
-        NotificationCenter.default.addObserver(
+        NSWorkspace.shared.notificationCenter.addObserver(
             self,
             selector: #selector(didActivateApp(_:)),
             name: NSWorkspace.didActivateApplicationNotification,
@@ -63,14 +66,14 @@ final class AppTracker {
            let name = front.localizedName {
             let bundleId = front.bundleIdentifier ?? "unknown.\(name)"
             if configuration.excludedBundleIDs.contains(bundleId) {
-                foregroundApp = nil
+                switchForegroundApp(to: nil)
             } else {
-                foregroundApp = RunningAppInfo(
+                switchForegroundApp(to: RunningAppInfo(
                     name: name,
                     bundleIdentifier: bundleId,
                     processIdentifier: front.processIdentifier,
                     isForeground: true
-                )
+                ))
             }
         }
         observeConfiguration()
@@ -78,14 +81,13 @@ final class AppTracker {
     
     func stopTracking() {
         isTracking = false
-        NotificationCenter.default.removeObserver(self, name: NSWorkspace.didActivateApplicationNotification, object: nil)
+        NSWorkspace.shared.notificationCenter.removeObserver(self, name: NSWorkspace.didActivateApplicationNotification, object: nil)
     }
     
     @objc private func didActivateApp(_ notification: Notification) {
         guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
               let name = app.localizedName else {
-            foregroundApp = nil
-            onAppSwitch?(nil)
+            switchForegroundApp(to: nil)
             return
         }
         
@@ -93,17 +95,40 @@ final class AppTracker {
         
         // Skip if excluded
         if configuration.excludedBundleIDs.contains(bundleId) {
-            foregroundApp = nil
-            onAppSwitch?(nil)
+            switchForegroundApp(to: nil)
             return
         }
         
-        foregroundApp = RunningAppInfo(
+        switchForegroundApp(to: RunningAppInfo(
             name: name,
             bundleIdentifier: bundleId,
             processIdentifier: app.processIdentifier,
             isForeground: true
-        )
+        ))
+    }
+    
+    private func switchForegroundApp(to newApp: RunningAppInfo?) {
+        let now = Date()
+        
+        // Close current session
+        if let currentApp = foregroundApp, let startTime = currentSessionStartTime {
+            if now.timeIntervalSince(startTime) > 1 { // Only record if > 1s
+                try? appState?.databaseManager.insertSession(
+                    bundleId: currentApp.bundleIdentifier,
+                    appName: currentApp.name,
+                    startTime: startTime,
+                    endTime: now
+                )
+            }
+        }
+        
+        foregroundApp = newApp
+        if newApp != nil {
+            currentSessionStartTime = now
+        } else {
+            currentSessionStartTime = nil
+        }
+        
         onAppSwitch?(foregroundApp)
     }
     
@@ -115,20 +140,18 @@ final class AppTracker {
                 guard let self = self, self.isTracking else { return }
                 self.observeConfiguration()
                 if let currentApp = self.foregroundApp, self.configuration.excludedBundleIDs.contains(currentApp.bundleIdentifier) {
-                    self.foregroundApp = nil
-                    self.onAppSwitch?(nil)
+                    self.switchForegroundApp(to: nil)
                 } else if self.foregroundApp == nil {
                     if let frontApp = NSWorkspace.shared.frontmostApplication,
                        let name = frontApp.localizedName {
                         let bundleId = frontApp.bundleIdentifier ?? "unknown.\(name)"
                         if !self.configuration.excludedBundleIDs.contains(bundleId) {
-                            self.foregroundApp = RunningAppInfo(
+                            self.switchForegroundApp(to: RunningAppInfo(
                                 name: name,
                                 bundleIdentifier: bundleId,
                                 processIdentifier: frontApp.processIdentifier,
                                 isForeground: true
-                            )
-                            self.onAppSwitch?(self.foregroundApp)
+                            ))
                         }
                     }
                 }
