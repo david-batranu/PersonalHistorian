@@ -232,31 +232,83 @@ struct AnalyticsView: View {
             "com.brave.Browser", "com.microsoft.edgemac", "company.thebrowser.Browser"
         ]
         
-        if !browserBundleIds.contains(bundleId) {
-            return (title, title)
-        }
-        
-        var cleanTitle = title
-        let suffixes = [" - Google Chrome", " - Safari", " — Mozilla Firefox", " - Brave", " - Microsoft Edge"]
-        for suffix in suffixes {
-            if cleanTitle.hasSuffix(suffix) {
-                cleanTitle.removeLast(suffix.count)
-                break
+        if browserBundleIds.contains(bundleId) {
+            var cleanTitle = title
+            let suffixes = [" - Google Chrome", " - Safari", " — Mozilla Firefox", " - Brave", " - Microsoft Edge"]
+            for suffix in suffixes {
+                if cleanTitle.hasSuffix(suffix) {
+                    cleanTitle.removeLast(suffix.count)
+                    break
+                }
             }
+            
+            let stringSeparators = [" - ", " | ", " • ", " · ", " – ", " — "]
+            for sep in stringSeparators {
+                if let range = cleanTitle.range(of: sep, options: .backwards) {
+                    let site = String(cleanTitle[range.upperBound...]).trimmingCharacters(in: .whitespaces)
+                    let page = String(cleanTitle[..<range.lowerBound]).trimmingCharacters(in: .whitespaces)
+                    if !site.isEmpty && site.count < 40 {
+                        return (site, page.isEmpty ? site : page)
+                    }
+                }
+            }
+            return (cleanTitle, cleanTitle)
         }
         
-        let stringSeparators = [" - ", " | ", " • ", " · ", " – ", " — "]
-        for sep in stringSeparators {
-            if let range = cleanTitle.range(of: sep, options: .backwards) {
-                let site = String(cleanTitle[range.upperBound...]).trimmingCharacters(in: .whitespaces)
-                let page = String(cleanTitle[..<range.lowerBound]).trimmingCharacters(in: .whitespaces)
-                if !site.isEmpty && site.count < 40 {
-                    return (site, page.isEmpty ? site : page)
+        let lowerBundleId = bundleId.lowercased()
+        
+        // JetBrains IDEs (e.g. PyCharm, IntelliJ, WebStorm)
+        if lowerBundleId.contains("jetbrains") {
+            // Format: ProjectName – filename.py
+            let stringSeparators = [" – ", " — ", " - "]
+            for sep in stringSeparators {
+                if let range = title.range(of: sep) {
+                    let site = String(title[..<range.lowerBound]).trimmingCharacters(in: .whitespaces)
+                    let page = String(title[range.upperBound...]).trimmingCharacters(in: .whitespaces)
+                    if !site.isEmpty {
+                        return (site, page.isEmpty ? site : page)
+                    }
                 }
             }
         }
         
-        return (cleanTitle, cleanTitle)
+        // VSCode & Cursor
+        if lowerBundleId.contains("vscode") || lowerBundleId.contains("cursor") {
+            // Format: filename - ProjectName - Visual Studio Code
+            var cleanTitle = title
+            if cleanTitle.hasSuffix(" - Visual Studio Code") {
+                cleanTitle.removeLast(22)
+            } else if cleanTitle.hasSuffix(" - Cursor") {
+                cleanTitle.removeLast(9)
+            }
+            let stringSeparators = [" - "]
+            for sep in stringSeparators {
+                if let range = cleanTitle.range(of: sep, options: .backwards) {
+                    let site = String(cleanTitle[range.upperBound...]).trimmingCharacters(in: .whitespaces)
+                    let page = String(cleanTitle[..<range.lowerBound]).trimmingCharacters(in: .whitespaces)
+                    if !site.isEmpty {
+                        return (site, page.isEmpty ? site : page)
+                    }
+                }
+            }
+        }
+        
+        // Xcode
+        if lowerBundleId.contains("dt.xcode") {
+            // Format: ProjectName — filename
+            let stringSeparators = [" — ", " - "]
+            for sep in stringSeparators {
+                if let range = title.range(of: sep) {
+                    let site = String(title[..<range.lowerBound]).trimmingCharacters(in: .whitespaces)
+                    let page = String(title[range.upperBound...]).trimmingCharacters(in: .whitespaces)
+                    if !site.isEmpty {
+                        return (site, page.isEmpty ? site : page)
+                    }
+                }
+            }
+        }
+        
+        return (title, title)
     }
     
     private var totalDurationSeconds: Int {
