@@ -2,6 +2,21 @@ import SwiftUI
 import Charts
 import OSLog
 
+struct AppUsageGroup: Identifiable {
+    let appName: String
+    let bundleId: String
+    let totalSeconds: Int
+    let sites: [SiteUsageGroup]
+    var id: String { bundleId }
+}
+
+struct SiteUsageGroup: Identifiable {
+    let siteName: String
+    let totalSeconds: Int
+    let records: [AppUsageRecord]
+    var id: String { siteName }
+}
+
 struct AnalyticsView: View {
     @Environment(AppState.self) private var appState
     
@@ -88,20 +103,51 @@ struct AnalyticsView: View {
                     .padding()
                     
                     List {
-                        ForEach(groupedUsageData, id: \.bundleId) { group in
+                        ForEach(groupedUsageData) { group in
                             DisclosureGroup {
-                                ForEach(group.records, id: \.self) { record in
-                                    HStack {
-                                        Text(record.windowTitle ?? "Unknown Window")
-                                            .font(.caption)
-                                            .lineLimit(1)
-                                            .truncationMode(.tail)
-                                        Spacer()
-                                        Text(formatDuration(seconds: record.durationSeconds))
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
+                                ForEach(group.sites) { site in
+                                    if site.records.count == 1 && (site.records[0].windowTitle == site.siteName || site.siteName == group.appName) {
+                                        HStack {
+                                            Text(site.siteName)
+                                                .font(.subheadline)
+                                                .lineLimit(1)
+                                                .truncationMode(.tail)
+                                            Spacer()
+                                            Text(formatDuration(seconds: site.totalSeconds))
+                                                .font(.subheadline)
+                                                .foregroundColor(.secondary)
+                                        }
+                                        .padding(.leading, 8)
+                                    } else {
+                                        DisclosureGroup {
+                                            ForEach(site.records, id: \.self) { record in
+                                                HStack {
+                                                    let (_, page) = extractSiteAndPage(from: record.windowTitle, bundleId: group.bundleId)
+                                                    Text(page)
+                                                        .font(.caption)
+                                                        .lineLimit(1)
+                                                        .truncationMode(.tail)
+                                                    Spacer()
+                                                    Text(formatDuration(seconds: record.durationSeconds))
+                                                        .font(.caption)
+                                                        .foregroundColor(.secondary)
+                                                }
+                                                .padding(.leading, 16)
+                                            }
+                                        } label: {
+                                            HStack {
+                                                Text(site.siteName)
+                                                    .font(.subheadline)
+                                                    .lineLimit(1)
+                                                    .truncationMode(.tail)
+                                                Spacer()
+                                                Text(formatDuration(seconds: site.totalSeconds))
+                                                    .font(.subheadline)
+                                                    .foregroundColor(.secondary)
+                                            }
+                                        }
+                                        .padding(.leading, 8)
                                     }
-                                    .padding(.leading, 8)
                                 }
                             } label: {
                                 HStack {
@@ -126,8 +172,8 @@ struct AnalyticsView: View {
                             }
                             .contextMenu {
                                 Button(role: .destructive) {
-                                    if let first = group.records.first {
-                                        excludeApp(first)
+                                    if let firstSite = group.sites.first, let firstRecord = firstSite.records.first {
+                                        excludeApp(firstRecord)
                                     }
                                 } label: {
                                     Label("Exclude App", systemImage: "eye.slash")
@@ -155,13 +201,62 @@ struct AnalyticsView: View {
         usageData.filter { !appState.configuration.excludedBundleIDs.contains($0.bundleId) }
     }
     
-    private var groupedUsageData: [(appName: String, bundleId: String, totalSeconds: Int, records: [AppUsageRecord])] {
-        let grouped = Dictionary(grouping: filteredUsageData, by: \.bundleId)
-        return grouped.map { (bundleId, records) in
-            let appName = records.first?.appName ?? "Unknown"
-            let total = records.reduce(0) { $0 + $1.durationSeconds }
-            return (appName: appName, bundleId: bundleId, totalSeconds: total, records: records.sorted { $0.durationSeconds > $1.durationSeconds })
+    private var groupedUsageData: [AppUsageGroup] {
+        let appGroups = Dictionary(grouping: filteredUsageData, by: \.bundleId)
+        return appGroups.map { (bundleId, appRecords) in
+            let appName = appRecords.first?.appName ?? "Unknown"
+            let appTotal = appRecords.reduce(0) { $0 + $1.durationSeconds }
+            
+            let siteGroups = Dictionary(grouping: appRecords) { record in
+                extractSiteAndPage(from: record.windowTitle, bundleId: bundleId).site
+            }
+            
+            let sites: [SiteUsageGroup] = siteGroups.map { (siteName, siteRecords) in
+                let siteTotal = siteRecords.reduce(0) { $0 + $1.durationSeconds }
+                return SiteUsageGroup(
+                    siteName: siteName,
+                    totalSeconds: siteTotal,
+                    records: siteRecords.sorted { $0.durationSeconds > $1.durationSeconds }
+                )
+            }.sorted { $0.totalSeconds > $1.totalSeconds }
+            
+            return AppUsageGroup(appName: appName, bundleId: bundleId, totalSeconds: appTotal, sites: sites)
         }.sorted { $0.totalSeconds > $1.totalSeconds }
+    }
+    
+    private func extractSiteAndPage(from title: String?, bundleId: String) -> (site: String, page: String) {
+        guard let title = title, !title.isEmpty else { return ("Unknown Window", "Unknown Window") }
+        
+        let browserBundleIds: Set<String> = [
+            "com.google.Chrome", "com.apple.Safari", "org.mozilla.firefox",
+            "com.brave.Browser", "com.microsoft.edgemac", "company.thebrowser.Browser"
+        ]
+        
+        if !browserBundleIds.contains(bundleId) {
+            return (title, title)
+        }
+        
+        var cleanTitle = title
+        let suffixes = [" - Google Chrome", " - Safari", " — Mozilla Firefox", " - Brave", " - Microsoft Edge"]
+        for suffix in suffixes {
+            if cleanTitle.hasSuffix(suffix) {
+                cleanTitle.removeLast(suffix.count)
+                break
+            }
+        }
+        
+        let stringSeparators = [" - ", " | ", " • ", " · ", " – ", " — "]
+        for sep in stringSeparators {
+            if let range = cleanTitle.range(of: sep, options: .backwards) {
+                let site = String(cleanTitle[range.upperBound...]).trimmingCharacters(in: .whitespaces)
+                let page = String(cleanTitle[..<range.lowerBound]).trimmingCharacters(in: .whitespaces)
+                if !site.isEmpty && site.count < 40 {
+                    return (site, page.isEmpty ? site : page)
+                }
+            }
+        }
+        
+        return (cleanTitle, cleanTitle)
     }
     
     private var totalDurationSeconds: Int {
