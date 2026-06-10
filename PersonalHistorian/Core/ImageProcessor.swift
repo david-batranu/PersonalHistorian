@@ -14,7 +14,9 @@ final class ImageProcessor: Sendable {
         let originalHeight = CGFloat(image.height)
         
         let targetHeight = CGFloat(maxHeight)
-        let targetWidth = targetHeight * (16.0 / 9.0)
+        // Preserve the original aspect ratio — do not assume 16:9
+        let aspectRatio = originalWidth / originalHeight
+        let targetWidth = targetHeight * aspectRatio
         
         // If image is already smaller or equal, return original
         if originalHeight <= targetHeight && originalWidth <= targetWidth {
@@ -66,15 +68,17 @@ final class ImageProcessor: Sendable {
         return data as Data
     }
     
-    /// Hashes the raw pixel data of the image.
+    /// Hashes the raw pixel data of the image for deduplication.
     func hash(image: CGImage) -> String {
-        guard let dataProvider = image.dataProvider, let data = dataProvider.data else {
+        guard let dataProvider = image.dataProvider,
+              let data = dataProvider.data,
+              let bytePtr = CFDataGetBytePtr(data) else {
+            // Fall back to UUID if pixel data is inaccessible
             return UUID().uuidString
         }
-        let buffer = CFDataGetBytePtr(data)
         let length = CFDataGetLength(data)
-        let hash = Insecure.MD5.hash(data: Data(bytes: buffer!, count: length))
-        return hash.compactMap { String(format: "%02x", $0) }.joined()
+        let imageHash = Insecure.MD5.hash(data: Data(bytes: bytePtr, count: length))
+        return imageHash.compactMap { String(format: "%02x", $0) }.joined()
     }
     
     /// Convenience: resize + compress in one call. Returns the hash and the data.

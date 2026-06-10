@@ -38,7 +38,7 @@ final class AppState {
         self.screenshotStorage = ScreenshotStorage()
         self.searchService = SearchService(dbManager: self.databaseManager)
         self.appTracker = AppTracker()
-        self.retentionManager = RetentionManager(dbManager: self.databaseManager, storage: self.screenshotStorage)
+        self.retentionManager = RetentionManager(dbManager: self.databaseManager, storage: self.screenshotStorage, configuration: self.configuration)
         
         let scheduler = CaptureScheduler()
         self.captureScheduler = scheduler

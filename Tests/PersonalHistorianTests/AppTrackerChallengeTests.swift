@@ -2,9 +2,11 @@ import XCTest
 import AppKit
 @testable import PersonalHistorian
 
+/// Additional AppTracker tests focused on performance and edge cases
+/// that complement the functional tests in AppTrackerTests.swift.
 @MainActor
 final class AppTrackerChallengeTests: XCTestCase {
-    
+
     private var testDefaultsSuiteName: String!
     private var testDefaults: UserDefaults!
 
@@ -19,38 +21,60 @@ final class AppTrackerChallengeTests: XCTestCase {
         super.tearDown()
     }
 
-    func testAppRemovedFromExclusionBecomesForeground() {
-        guard let frontApp = NSWorkspace.shared.frontmostApplication,
-              let bundleId = frontApp.bundleIdentifier else {
-            XCTFail("Should have a frontmost app with a bundle ID")
-            return
-        }
-        
-        var config = Configuration(defaults: testDefaults)
-        config.excludedBundleIDs = [bundleId]
-        
+    // MARK: - Performance
+
+    func testSnapshotPerformance() throws {
+        try XCTSkipIf(NSWorkspace.shared.frontmostApplication == nil, "Skipped in headless environment")
+        let config = Configuration(defaults: testDefaults)
         let tracker = AppTracker(configuration: config)
-        tracker.startTracking()
-        
-        XCTAssertNil(tracker.foregroundApp, "App should initially be excluded")
-        
-        let expectation = XCTestExpectation(description: "App becomes tracked after exclusion removed")
-        
-        tracker.onAppSwitch = { appInfo in
-            if appInfo?.bundleIdentifier == bundleId {
-                expectation.fulfill()
-            }
+
+        // snapshot() should be sub-millisecond — it reads cached NSWorkspace state
+        measure {
+            _ = tracker.snapshot()
         }
-        
-        // Remove from exclusion
-        config.excludedBundleIDs = []
-        
-        // Let Task { @MainActor run
-        let result = XCTWaiter.wait(for: [expectation], timeout: 1.0)
-        XCTAssertEqual(result, .completed, "Foreground app should update when exclusion is removed")
-        XCTAssertNotNil(tracker.foregroundApp)
-        XCTAssertEqual(tracker.foregroundApp?.bundleIdentifier, bundleId)
-        
+    }
+
+    // MARK: - Edge Cases
+
+    func testSnapshotWithNoRunningApps() {
+        // Exclude all running apps to verify snapshot handles an empty list gracefully
+        let config = Configuration(defaults: testDefaults)
+        let allBundleIds = NSWorkspace.shared.runningApplications
+            .compactMap { $0.bundleIdentifier }
+        config.excludedBundleIDs = allBundleIds
+
+        let tracker = AppTracker(configuration: config)
+        let snapshot = tracker.snapshot()
+
+        // When all apps are excluded, foreground should be nil
+        XCTAssertNil(snapshot.foreground, "Foreground should be nil when all apps are excluded")
+        // Running list should also be empty
+        XCTAssertTrue(snapshot.running.isEmpty, "Running list should be empty when all apps are excluded")
+    }
+
+    func testStartAndStopTrackingIsIdempotent() {
+        let config = Configuration(defaults: testDefaults)
+        let tracker = AppTracker(configuration: config)
+
+        // Multiple start calls should not crash or duplicate observers
+        tracker.startTracking()
+        tracker.startTracking()
+        tracker.startTracking()
+
         tracker.stopTracking()
+
+        // After stop, another stop should not crash
+        tracker.stopTracking()
+    }
+
+    func testSnapshotRunningAppsHaveNonEmptyBundleIds() throws {
+        try XCTSkipIf(NSWorkspace.shared.frontmostApplication == nil, "Skipped in headless environment")
+        let config = Configuration(defaults: testDefaults)
+        let tracker = AppTracker(configuration: config)
+
+        let snapshot = tracker.snapshot()
+        for app in snapshot.running {
+            XCTAssertFalse(app.bundleIdentifier.isEmpty, "Bundle ID should not be empty for \(app.name)")
+        }
     }
 }

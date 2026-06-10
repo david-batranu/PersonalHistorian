@@ -1,6 +1,7 @@
 import Foundation
 import ScreenCaptureKit
 import CoreGraphics
+import AppKit
 
 enum ScreenCaptureError: Error {
     case permissionDenied
@@ -13,39 +14,43 @@ final class ScreenCapture: Sendable {
     func hasPermission() -> Bool {
         return CGPreflightScreenCaptureAccess()
     }
-    
+
     /// Requests Screen Recording permission (shows system dialog on first call).
     func requestPermission() -> Bool {
         return CGRequestScreenCaptureAccess()
     }
-    
+
     /// Captures the primary display at native resolution.
     /// Returns the raw CGImage (full Retina resolution).
     func captureMainDisplay() async throws -> CGImage {
         guard hasPermission() else {
             throw ScreenCaptureError.permissionDenied
         }
-        
+
         let content: SCShareableContent
         do {
             content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
         } catch {
             throw ScreenCaptureError.captureFailed(error)
         }
-        
+
         guard let display = content.displays.first else {
             throw ScreenCaptureError.noDisplayFound
         }
-        
+
         let filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])
-        
+
+        // Use the actual backing scale factor of the main screen.
+        // 2.0 for standard Retina, 3.0 for XDR/ProMotion, 1.0 for non-Retina.
+        let scaleFactor = await MainActor.run { NSScreen.main?.backingScaleFactor ?? 2.0 }
+
         let config = SCStreamConfiguration()
-        config.width = display.width * 2
-        config.height = display.height * 2
+        config.width = Int(Double(display.width) * scaleFactor)
+        config.height = Int(Double(display.height) * scaleFactor)
         config.showsCursor = false
         config.captureResolution = .best
         config.colorSpaceName = CGColorSpace.sRGB
-        
+
         do {
             let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
             return image

@@ -14,9 +14,9 @@
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
 | 1 | Scaffolding & Models | Phase 1 & 2: XcodeGen setup, models, basic @main | none | DONE |
-| 2 | Capture Pipeline | Phase 3: ScreenCapture, OCREngine, AppTracker, ImageProcessor | M1 | IN_PROGRESS |
-| 3 | Storage Layer | Phase 4: GRDB DatabaseManager, Storage, SearchService | M1 | PLANNED |
-| 4 | Orchestration | Phase 5: CaptureScheduler, dual track sync | M2, M3 | PLANNED |
+| 2 | Capture Pipeline | Phase 3: ScreenCapture, OCREngine, AppTracker, ImageProcessor | M1 | DONE |
+| 3 | Storage Layer | Phase 4: GRDB DatabaseManager, Storage, SearchService | M1 | DONE |
+| 4 | Orchestration | Phase 5: CaptureScheduler, dual track sync | M2, M3 | DONE |
 
 ## Interface Contracts
 ### AppState ↔ Services

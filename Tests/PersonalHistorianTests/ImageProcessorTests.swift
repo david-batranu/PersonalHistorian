@@ -29,53 +29,54 @@ final class ImageProcessorTests: XCTestCase {
     }
     
     func testResizeExtremeAspectRatio() {
-        // 4000x1
+        // 4000x1 — extremely wide, 1px tall
         guard let original = createSolidColorImage(width: 4000, height: 1) else {
             XCTFail("Failed to create mock image")
             return
         }
-        
+
         let resized = processor.resize(original, maxHeight: 1080)
         XCTAssertNotNil(resized)
-        
-        // With unbounded width fix, an image that is 4000x1 will have target width 1920.
-        // Scale = 1920 / 4000 = 0.48. New width = 1920, new height = max(1, 1 * 0.48) = 1.
-        XCTAssertEqual(resized?.width, 1920)
+
+        // aspectRatio = 4000/1 = 4000; targetWidth = 1080 * 4000 = 4_320_000
+        // originalHeight (1) ≤ 1080 AND originalWidth (4000) ≤ targetWidth (4_320_000)
+        // → early return: image passes through unchanged at 4000×1
+        XCTAssertEqual(resized?.width, 4000)
         XCTAssertEqual(resized?.height, 1)
     }
     
     func testResizeUltrawideConstraint() {
-        // Create an image that is taller than max height to force a resize
-        // e.g. 5000 x 2000
+        // 5000x2000 — wider than tall
         guard let original = createSolidColorImage(width: 5000, height: 2000) else {
             XCTFail("Failed to create mock image")
             return
         }
-        
+
         let resized = processor.resize(original, maxHeight: 1080)
         XCTAssertNotNil(resized)
-        
-        // Scale should be min(1920/5000, 1080/2000) = 0.384
-        // New width = 5000 * 0.384 = 1920
-        // New height = 2000 * 0.384 = 768
-        XCTAssertEqual(resized?.width, 1920)
-        XCTAssertEqual(resized?.height, 768)
+
+        // aspectRatio = 5000/2000 = 2.5; targetWidth = 1080 * 2.5 = 2700
+        // scale = min(2700/5000, 1080/2000) = min(0.54, 0.54) = 0.54
+        // newWidth = Int(5000 * 0.54) = 2700, newHeight = Int(2000 * 0.54) = 1080
+        XCTAssertEqual(resized?.width, 2700)
+        XCTAssertEqual(resized?.height, 1080)
     }
     
     func testResizeZeroHeightDoesNotCrash() {
-        // Technically an image cannot have zero height, but let's test a very thin one that requires scale down
+        // 40000x2000 — ultra-wide, scaled to maxHeight=1
         guard let original = createSolidColorImage(width: 40000, height: 2000) else {
             XCTFail("Failed to create mock image")
             return
         }
-        
-        // Scale down significantly
+
         let resized = processor.resize(original, maxHeight: 1)
         XCTAssertNotNil(resized)
-        
-        // Scale = min(1.777/40000, 1/2000) = 0.0000444
-        // New width = 40000 * 0.0000444 = 1.77 -> 1
-        XCTAssertEqual(resized?.width, 1)
+
+        // aspectRatio = 40000/2000 = 20; targetWidth = 1 * 20 = 20
+        // scale = min(20/40000, 1/2000) = min(0.0005, 0.0005) = 0.0005
+        // newWidth = max(1, Int(40000 * 0.0005)) = max(1, 20) = 20
+        // newHeight = max(1, Int(2000 * 0.0005)) = max(1, 1) = 1
+        XCTAssertEqual(resized?.width, 20)
         XCTAssertEqual(resized?.height, 1)
     }
     

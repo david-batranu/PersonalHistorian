@@ -1,4 +1,4 @@
-.PHONY: generate build run clean
+.PHONY: generate build run clean test
 
 generate:
 	xcodegen generate

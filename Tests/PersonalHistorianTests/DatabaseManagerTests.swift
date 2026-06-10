@@ -60,7 +60,7 @@ final class DatabaseManagerTests: XCTestCase {
         let endTime = formatter.date(from: "2026-06-09T10:30:00Z")! // 1800 seconds
         
         // When
-        try dbManager.insertSession(bundleId: bundleId, appName: appName, startTime: startTime, endTime: endTime)
+        try dbManager.insertSession(bundleId: bundleId, appName: appName, windowTitle: nil, startTime: startTime, endTime: endTime)
         
         // Then
         let usage = try dbManager.fetchAppUsage(for: "2026-06-09")
@@ -71,7 +71,7 @@ final class DatabaseManagerTests: XCTestCase {
         // When inserting another session
         let startTime2 = formatter.date(from: "2026-06-09T11:00:00Z")!
         let endTime2 = formatter.date(from: "2026-06-09T11:15:00Z")! // 900 seconds
-        try dbManager.insertSession(bundleId: bundleId, appName: appName, startTime: startTime2, endTime: endTime2)
+        try dbManager.insertSession(bundleId: bundleId, appName: appName, windowTitle: nil, startTime: startTime2, endTime: endTime2)
         
         // Then total duration should be 2700
         let usageUpdated = try dbManager.fetchAppUsage(for: "2026-06-09")

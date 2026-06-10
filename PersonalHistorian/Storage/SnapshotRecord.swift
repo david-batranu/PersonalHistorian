@@ -14,10 +14,14 @@ struct SnapshotRecord: Codable, FetchableRecord, PersistableRecord, Sendable, Id
     
     var screenshotPath: String? { imagePath }
     
+    private static let timestampFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return f
+    }()
+
     var parsedTimestamp: Date {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        return formatter.date(from: timestamp) ?? Date()
+        Self.timestampFormatter.date(from: timestamp) ?? Date()
     }
     
     enum CodingKeys: String, CodingKey {

@@ -53,20 +53,25 @@ final class IntegrationTests: XCTestCase {
             imageProcessor.processForStorage(sampleImage, maxHeight: 1080, quality: 0.7)
         }.value
         
-        let (ocrText, jpegData) = try await (ocrTask, processTask)
-        
-        XCTAssertNotNil(jpegData)
+        let (ocrText, processResult) = try await (ocrTask, processTask)
+
+        XCTAssertNotNil(processResult)
         XCTAssertTrue(ocrText.contains("Pipeline"))
         XCTAssertTrue(ocrText.contains("Integration"))
-        
-        let fileId = UUID().uuidString
-        let fileName = "\(fileId).jpg"
+
+        guard let processResult = processResult else {
+            XCTFail("processForStorage should return a non-nil result")
+            return
+        }
+
+        let fileId = processResult.hash
+        let fileName = "\(fileId).heic"
         let fileUrl = tempDir.appendingPathComponent("Screenshots").appendingPathComponent(fileName)
-        
+
         // Create directory since we use custom path
         try FileManager.default.createDirectory(at: fileUrl.deletingLastPathComponent(), withIntermediateDirectories: true)
-        
-        try jpegData!.write(to: fileUrl, options: .atomic)
+
+        try processResult.data.write(to: fileUrl, options: .atomic)
         
         try dbManager.insertSnapshot(
             timestamp: "2026-06-09 13:00:00",
