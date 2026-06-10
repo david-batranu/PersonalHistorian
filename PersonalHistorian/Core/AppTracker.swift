@@ -1,6 +1,7 @@
 import AppKit
 import Observation
 import OSLog
+import Combine
 
 @MainActor
 @Observable
@@ -11,6 +12,7 @@ final class AppTracker {
     private let logger = Logger(subsystem: "com.personalhistorian.app", category: "AppTracker")
     private var isTracking = false
     private var currentSessionStartTime: Date?
+    private var windowPollingTimer: AnyCancellable?
     
     weak var appState: AppState?
     
@@ -31,7 +33,8 @@ final class AppTracker {
                     name: name,
                     bundleIdentifier: bundleId,
                     processIdentifier: app.processIdentifier,
-                    isForeground: app.isActive
+                    isForeground: app.isActive,
+                    windowTitle: nil
                 )
             }
         
@@ -44,7 +47,8 @@ final class AppTracker {
                     name: name,
                     bundleIdentifier: bundleId,
                     processIdentifier: frontApp.processIdentifier,
-                    isForeground: true
+                    isForeground: true,
+                    windowTitle: WindowTitleHelper.getActiveWindowTitle(for: frontApp.processIdentifier)
                 )
             }
         }
@@ -72,15 +76,24 @@ final class AppTracker {
                     name: name,
                     bundleIdentifier: bundleId,
                     processIdentifier: front.processIdentifier,
-                    isForeground: true
+                    isForeground: true,
+                    windowTitle: WindowTitleHelper.getActiveWindowTitle(for: front.processIdentifier)
                 ))
             }
         }
         observeConfiguration()
+        
+        windowPollingTimer = Timer.publish(every: 2.0, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                self?.pollWindowTitle()
+            }
     }
     
     func stopTracking() {
         isTracking = false
+        windowPollingTimer?.cancel()
+        windowPollingTimer = nil
         NSWorkspace.shared.notificationCenter.removeObserver(self, name: NSWorkspace.didActivateApplicationNotification, object: nil)
     }
     
@@ -103,8 +116,20 @@ final class AppTracker {
             name: name,
             bundleIdentifier: bundleId,
             processIdentifier: app.processIdentifier,
-            isForeground: true
+            isForeground: true,
+            windowTitle: WindowTitleHelper.getActiveWindowTitle(for: app.processIdentifier)
         ))
+    }
+    
+    private func pollWindowTitle() {
+        guard let fg = foregroundApp else { return }
+        let currentTitle = WindowTitleHelper.getActiveWindowTitle(for: fg.processIdentifier)
+        
+        if currentTitle != fg.windowTitle {
+            var newApp = fg
+            newApp.windowTitle = currentTitle
+            switchForegroundApp(to: newApp)
+        }
     }
     
     private func switchForegroundApp(to newApp: RunningAppInfo?) {
@@ -116,6 +141,7 @@ final class AppTracker {
                 try? appState?.databaseManager.insertSession(
                     bundleId: currentApp.bundleIdentifier,
                     appName: currentApp.name,
+                    windowTitle: currentApp.windowTitle,
                     startTime: startTime,
                     endTime: now
                 )
@@ -150,7 +176,8 @@ final class AppTracker {
                                 name: name,
                                 bundleIdentifier: bundleId,
                                 processIdentifier: frontApp.processIdentifier,
-                                isForeground: true
+                                isForeground: true,
+                                windowTitle: WindowTitleHelper.getActiveWindowTitle(for: frontApp.processIdentifier)
                             ))
                         }
                     }

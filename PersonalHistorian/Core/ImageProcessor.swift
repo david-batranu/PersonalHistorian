@@ -2,6 +2,7 @@ import CoreGraphics
 import UniformTypeIdentifiers
 import ImageIO
 import Foundation
+import CryptoKit
 
 final class ImageProcessor: Sendable {
     init() {}
@@ -45,10 +46,10 @@ final class ImageProcessor: Sendable {
         return context.makeImage()
     }
     
-    /// Compresses a CGImage to JPEG data at the given quality.
-    func compressToJPEG(_ image: CGImage, quality: Double) -> Data? {
+    /// Compresses a CGImage to HEIC data at the given quality.
+    func compressToHEIC(_ image: CGImage, quality: Double) -> Data? {
         let data = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(data, UTType.jpeg.identifier as CFString, 1, nil) else {
+        guard let destination = CGImageDestinationCreateWithData(data, UTType.heic.identifier as CFString, 1, nil) else {
             return nil
         }
         
@@ -65,9 +66,22 @@ final class ImageProcessor: Sendable {
         return data as Data
     }
     
-    /// Convenience: resize + compress in one call.
-    func processForStorage(_ image: CGImage, maxHeight: Int, quality: Double) -> Data? {
+    /// Hashes the raw pixel data of the image.
+    func hash(image: CGImage) -> String {
+        guard let dataProvider = image.dataProvider, let data = dataProvider.data else {
+            return UUID().uuidString
+        }
+        let buffer = CFDataGetBytePtr(data)
+        let length = CFDataGetLength(data)
+        let hash = Insecure.MD5.hash(data: Data(bytes: buffer!, count: length))
+        return hash.compactMap { String(format: "%02x", $0) }.joined()
+    }
+    
+    /// Convenience: resize + compress in one call. Returns the hash and the data.
+    func processForStorage(_ image: CGImage, maxHeight: Int, quality: Double) -> (hash: String, data: Data)? {
         guard let resizedImage = resize(image, maxHeight: maxHeight) else { return nil }
-        return compressToJPEG(resizedImage, quality: quality)
+        let imageHash = hash(image: resizedImage)
+        guard let heicData = compressToHEIC(resizedImage, quality: quality) else { return nil }
+        return (imageHash, heicData)
     }
 }

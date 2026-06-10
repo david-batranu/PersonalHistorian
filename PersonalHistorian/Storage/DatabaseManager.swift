@@ -49,12 +49,12 @@ final class DatabaseManager: Sendable {
         }
     }
     
-    func insertSession(bundleId: String, appName: String, startTime: Date, endTime: Date) throws {
+    func insertSession(bundleId: String, appName: String, windowTitle: String?, startTime: Date, endTime: Date) throws {
         try dbPool?.write { db in
             try db.execute(sql: """
-                INSERT INTO usage_sessions (bundleId, appName, startTime, endTime)
-                VALUES (?, ?, ?, ?)
-            """, arguments: [bundleId, appName, startTime, endTime])
+                INSERT INTO usage_sessions (bundleId, appName, windowTitle, startTime, endTime)
+                VALUES (?, ?, ?, ?, ?)
+            """, arguments: [bundleId, appName, windowTitle, startTime, endTime])
         }
     }
     
@@ -63,10 +63,10 @@ final class DatabaseManager: Sendable {
         guard let dbPool = dbPool else { return [] }
         return try dbPool.read { db in
             let sql = """
-                SELECT date(startTime, 'localtime') as date, bundleId, appName, SUM(CAST((strftime('%s', endTime) - strftime('%s', startTime)) AS INTEGER)) as durationSeconds
+                SELECT date(startTime, 'localtime') as date, bundleId, appName, windowTitle, SUM(CAST((strftime('%s', endTime) - strftime('%s', startTime)) AS INTEGER)) as durationSeconds
                 FROM usage_sessions
                 WHERE date(startTime, 'localtime') = ?
-                GROUP BY bundleId, appName
+                GROUP BY bundleId, appName, windowTitle
                 ORDER BY durationSeconds DESC
             """
             return try AppUsageRecord.fetchAll(db, sql: sql, arguments: [dateString])
@@ -116,6 +116,12 @@ final class DatabaseManager: Sendable {
                 t.column("appName", .text).notNull()
                 t.column("startTime", .datetime).notNull()
                 t.column("endTime", .datetime).notNull()
+            }
+        }
+        
+        migrator.registerMigration("v5") { db in
+            try db.alter(table: "usage_sessions") { t in
+                t.add(column: "windowTitle", .text)
             }
         }
         

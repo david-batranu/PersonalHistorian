@@ -26,18 +26,7 @@ final class RetentionManager: Sendable {
         guard let pool = dbManager.dbPool else { return }
         
         do {
-            // 1. Fetch old snapshots to delete files
-            let pathsToDelete: [String] = try await pool.read { db in
-                let sql = "SELECT imagePath FROM snapshots WHERE timestamp < ?"
-                return try String.fetchAll(db, sql: sql, arguments: [cutoffString])
-            }
-            
-            // 2. Delete files from disk
-            for path in pathsToDelete {
-                try? storage.delete(fileName: path)
-            }
-            
-            // 3. Delete rows from DB
+            // 1. Delete rows from DB
             try await pool.write { db in
                 try db.execute(sql: "DELETE FROM snapshots WHERE timestamp < ?", arguments: [cutoffString])
                 
@@ -47,7 +36,24 @@ final class RetentionManager: Sendable {
                 try db.execute(sql: "DELETE FROM usage_sessions WHERE endTime < ?", arguments: [isoCutoff])
             }
             
-            logger.info("Retention cleanup finished. Deleted \(pathsToDelete.count) snapshots.")
+            // 2. Fetch ALL remaining referenced image paths
+            let activePaths: Set<String> = try await pool.read { db in
+                let sql = "SELECT DISTINCT imagePath FROM snapshots"
+                let paths = try String.fetchAll(db, sql: sql)
+                return Set(paths)
+            }
+            
+            // 3. Scan the storage directory and delete unreferenced files
+            let allFiles = try FileManager.default.contentsOfDirectory(atPath: storage.baseDirectory.path)
+            var deletedCount = 0
+            for file in allFiles {
+                if !activePaths.contains(file) {
+                    try? storage.delete(fileName: file)
+                    deletedCount += 1
+                }
+            }
+            
+            logger.info("Retention cleanup finished. Deleted \(deletedCount) unreferenced files.")
         } catch {
             logger.error("Retention cleanup failed: \(error)")
         }

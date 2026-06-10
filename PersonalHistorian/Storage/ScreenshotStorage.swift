@@ -14,11 +14,14 @@ final class ScreenshotStorage: Sendable {
         return baseDirectory.appendingPathComponent(relativePath)
     }
     
-    func save(jpegData: Data) throws -> String {
-        let fileId = UUID().uuidString
-        let fileName = "\(fileId).jpg"
+    func save(imageData: Data, hash: String, fileExtension: String = "heic") throws -> String {
+        let fileName = "\(hash).\(fileExtension)"
         let fileUrl = fullURL(for: fileName)
-        try jpegData.write(to: fileUrl, options: .atomic)
+        
+        if !FileManager.default.fileExists(atPath: fileUrl.path) {
+            try imageData.write(to: fileUrl, options: .atomic)
+        }
+        
         return fileName
     }
     

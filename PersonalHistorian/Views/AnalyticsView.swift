@@ -49,15 +49,15 @@ struct AnalyticsView: View {
             } else {
                 VStack {
                     Chart {
-                        ForEach(filteredUsageData.prefix(7), id: \.bundleId) { record in
+                        ForEach(groupedUsageData.prefix(7), id: \.bundleId) { group in
                             BarMark(
-                                x: .value("App", record.appName),
-                                y: .value("Duration (Minutes)", Double(record.durationSeconds) / 60.0),
+                                x: .value("App", group.appName),
+                                y: .value("Duration (Minutes)", Double(group.totalSeconds) / 60.0),
                                 width: .fixed(35)
                             )
-                            .foregroundStyle(by: .value("App", record.appName))
+                            .foregroundStyle(by: .value("App", group.appName))
                             .annotation(position: .top) {
-                                Text(formatDuration(seconds: record.durationSeconds))
+                                Text(formatDuration(seconds: group.totalSeconds))
                                     .font(.caption2)
                                     .foregroundColor(.secondary)
                             }
@@ -67,8 +67,8 @@ struct AnalyticsView: View {
                         AxisMarks { value in
                             AxisValueLabel {
                                 if let appName = value.as(String.self) {
-                                    if let record = filteredUsageData.first(where: { $0.appName == appName }),
-                                       let icon = getAppIcon(for: record.bundleId) {
+                                    if let group = groupedUsageData.first(where: { $0.appName == appName }),
+                                       let icon = getAppIcon(for: group.bundleId) {
                                         VStack(spacing: 2) {
                                             Image(nsImage: icon)
                                                 .resizable()
@@ -87,31 +87,51 @@ struct AnalyticsView: View {
                     .frame(height: 250)
                     .padding()
                     
-                    List(filteredUsageData, id: \.bundleId) { record in
-                        HStack {
-                            if let icon = getAppIcon(for: record.bundleId) {
-                                Image(nsImage: icon)
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: 20, height: 20)
-                            } else {
-                                Image(systemName: "app.fill")
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: 20, height: 20)
-                                    .foregroundColor(.secondary)
-                            }
-                            
-                            Text(record.appName)
-                            Spacer()
-                            Text(formatDuration(seconds: record.durationSeconds))
-                                .foregroundColor(.secondary)
-                        }
-                        .contextMenu {
-                            Button(role: .destructive) {
-                                excludeApp(record)
+                    List {
+                        ForEach(groupedUsageData, id: \.bundleId) { group in
+                            DisclosureGroup {
+                                ForEach(group.records, id: \.self) { record in
+                                    HStack {
+                                        Text(record.windowTitle ?? "Unknown Window")
+                                            .font(.caption)
+                                            .lineLimit(1)
+                                            .truncationMode(.tail)
+                                        Spacer()
+                                        Text(formatDuration(seconds: record.durationSeconds))
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    .padding(.leading, 8)
+                                }
                             } label: {
-                                Label("Exclude App", systemImage: "eye.slash")
+                                HStack {
+                                    if let icon = getAppIcon(for: group.bundleId) {
+                                        Image(nsImage: icon)
+                                            .resizable()
+                                            .scaledToFit()
+                                            .frame(width: 20, height: 20)
+                                    } else {
+                                        Image(systemName: "app.fill")
+                                            .resizable()
+                                            .scaledToFit()
+                                            .frame(width: 20, height: 20)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    
+                                    Text(group.appName)
+                                    Spacer()
+                                    Text(formatDuration(seconds: group.totalSeconds))
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            .contextMenu {
+                                Button(role: .destructive) {
+                                    if let first = group.records.first {
+                                        excludeApp(first)
+                                    }
+                                } label: {
+                                    Label("Exclude App", systemImage: "eye.slash")
+                                }
                             }
                         }
                     }
@@ -133,6 +153,15 @@ struct AnalyticsView: View {
     
     private var filteredUsageData: [AppUsageRecord] {
         usageData.filter { !appState.configuration.excludedBundleIDs.contains($0.bundleId) }
+    }
+    
+    private var groupedUsageData: [(appName: String, bundleId: String, totalSeconds: Int, records: [AppUsageRecord])] {
+        let grouped = Dictionary(grouping: filteredUsageData, by: \.bundleId)
+        return grouped.map { (bundleId, records) in
+            let appName = records.first?.appName ?? "Unknown"
+            let total = records.reduce(0) { $0 + $1.durationSeconds }
+            return (appName: appName, bundleId: bundleId, totalSeconds: total, records: records.sorted { $0.durationSeconds > $1.durationSeconds })
+        }.sorted { $0.totalSeconds > $1.totalSeconds }
     }
     
     private var totalDurationSeconds: Int {

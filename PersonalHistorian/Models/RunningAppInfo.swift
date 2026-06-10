@@ -5,4 +5,5 @@ struct RunningAppInfo: Codable, Hashable, Sendable {
     let bundleIdentifier: String
     let processIdentifier: Int32
     let isForeground: Bool
+    var windowTitle: String? = nil
 }

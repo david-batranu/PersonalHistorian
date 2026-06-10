@@ -9,6 +9,10 @@ actor CaptureScheduler {
     private var captureTask: Task<Void, Never>?
     private let logger = Logger(subsystem: "com.personalhistorian.app", category: "CaptureScheduler")
     
+    private var lastHash: String?
+    private var lastFileName: String?
+    private var lastOCRText: String?
+    
     private let screenCapture = ScreenCapture()
     private let ocrEngine = OCREngine()
     private let imageProcessor = ImageProcessor()
@@ -83,45 +87,82 @@ actor CaptureScheduler {
             throw error
         }
         
-        // 2. Process concurrently (OCR + Resize/Compress)
-        let ocrLevelStr = await appState.configuration.ocrRecognitionLevel
-        let ocrLevel: VNRequestTextRecognitionLevel = (ocrLevelStr == "fast") ? .fast : .accurate
         let maxHeight = await appState.configuration.maxResolutionHeight
         let quality = await appState.configuration.imageQuality
         
-        async let ocrTask = ocrEngine.recognizeText(in: cgImage, level: ocrLevel)
-        async let processTask = Task.detached {
-            self.imageProcessor.processForStorage(cgImage, maxHeight: maxHeight, quality: quality)
-        }.value
-        
-        let (ocrText, jpegData) = try await (ocrTask, processTask)
-        
-        guard let jpegData = jpegData else {
-            logger.error("Image processing failed to produce JPEG data")
+        // Resize first for faster hashing
+        guard let resizedImage = imageProcessor.resize(cgImage, maxHeight: maxHeight) else {
+            logger.error("Failed to resize image")
             return
         }
         
-        // 3. Save to disk
-        let fileName: String
-        do {
-            fileName = try appState.screenshotStorage.save(jpegData: jpegData)
-        } catch {
-            logger.error("Failed to write image to disk: \(error)")
-            return
-        }
+        let currentHash = imageProcessor.hash(image: resizedImage)
         
         let timestamp = Date()
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
         let dateString = dateFormatter.string(from: timestamp)
         
-        // 4. Save to Database
+        // 2. Deduplication check
+        if currentHash == lastHash, let fileName = lastFileName {
+            logger.info("Image identical to last capture. Deduplicating.")
+            
+            try await appState.databaseManager.insertSnapshot(
+                timestamp: dateString,
+                filePath: fileName,
+                foregroundApp: foreground.name,
+                appBundleId: foreground.bundleIdentifier,
+                windowTitle: foreground.windowTitle,
+                ocrText: lastOCRText
+            )
+            
+            await MainActor.run {
+                appState.lastCaptureTime = timestamp
+                appState.captureCount += 1
+            }
+            
+            let totalMs = Int((CFAbsoluteTimeGetCurrent() - startTime) * 1000)
+            logger.debug("Deduplicated capture completed in \(totalMs)ms for \(foreground.name)")
+            return
+        }
+        
+        // 3. Process concurrently (OCR + Compress)
+        let ocrLevelStr = await appState.configuration.ocrRecognitionLevel
+        let ocrLevel: VNRequestTextRecognitionLevel = (ocrLevelStr == "fast") ? .fast : .accurate
+        
+        async let ocrTask = ocrEngine.recognizeText(in: resizedImage, level: ocrLevel)
+        async let heicDataTask = Task.detached {
+            self.imageProcessor.compressToHEIC(resizedImage, quality: quality)
+        }.value
+        
+        let (ocrText, heicData) = try await (ocrTask, heicDataTask)
+        
+        guard let heicData = heicData else {
+            logger.error("Image processing failed to produce HEIC data")
+            return
+        }
+        
+        // 4. Save to disk
+        let fileName: String
+        do {
+            fileName = try appState.screenshotStorage.save(imageData: heicData, hash: currentHash, fileExtension: "heic")
+        } catch {
+            logger.error("Failed to write image to disk: \(error)")
+            return
+        }
+        
+        // Update state
+        self.lastHash = currentHash
+        self.lastFileName = fileName
+        self.lastOCRText = ocrText
+        
+        // 5. Save to Database
         try await appState.databaseManager.insertSnapshot(
             timestamp: dateString,
             filePath: fileName,
             foregroundApp: foreground.name,
             appBundleId: foreground.bundleIdentifier,
-            windowTitle: nil, // Window title extraction not implemented yet
+            windowTitle: foreground.windowTitle,
             ocrText: ocrText
         )
         
