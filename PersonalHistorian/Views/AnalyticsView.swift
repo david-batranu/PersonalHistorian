@@ -232,6 +232,13 @@ struct AnalyticsView: View {
             "com.brave.Browser", "com.microsoft.edgemac", "company.thebrowser.Browser"
         ]
         
+        // Helper to clean dynamic notification emojis (like 🔊, 🔴) from site names so they group properly
+        let cleanSiteName = { (site: String) -> String in
+            String(site.filter { char in
+                !char.unicodeScalars.contains { $0.properties.isEmojiPresentation }
+            }).trimmingCharacters(in: .whitespaces)
+        }
+        
         if browserBundleIds.contains(bundleId) {
             var cleanTitle = title
             let suffixes = [" - Google Chrome", " - Safari", " — Mozilla Firefox", " - Brave", " - Microsoft Edge"]
@@ -248,11 +255,11 @@ struct AnalyticsView: View {
                     let site = String(cleanTitle[range.upperBound...]).trimmingCharacters(in: .whitespaces)
                     let page = String(cleanTitle[..<range.lowerBound]).trimmingCharacters(in: .whitespaces)
                     if !site.isEmpty && site.count < 40 {
-                        return (site, page.isEmpty ? site : page)
+                        return (cleanSiteName(site), page.isEmpty ? site : page)
                     }
                 }
             }
-            return (cleanTitle, cleanTitle)
+            return (cleanSiteName(cleanTitle), cleanTitle)
         }
         
         let lowerBundleId = bundleId.lowercased()
@@ -266,7 +273,7 @@ struct AnalyticsView: View {
                     let site = String(title[..<range.lowerBound]).trimmingCharacters(in: .whitespaces)
                     let page = String(title[range.upperBound...]).trimmingCharacters(in: .whitespaces)
                     if !site.isEmpty {
-                        return (site, page.isEmpty ? site : page)
+                        return (cleanSiteName(site), page.isEmpty ? site : page)
                     }
                 }
             }
@@ -287,7 +294,7 @@ struct AnalyticsView: View {
                     let site = String(cleanTitle[range.upperBound...]).trimmingCharacters(in: .whitespaces)
                     let page = String(cleanTitle[..<range.lowerBound]).trimmingCharacters(in: .whitespaces)
                     if !site.isEmpty {
-                        return (site, page.isEmpty ? site : page)
+                        return (cleanSiteName(site), page.isEmpty ? site : page)
                     }
                 }
             }
@@ -302,13 +309,13 @@ struct AnalyticsView: View {
                     let site = String(title[..<range.lowerBound]).trimmingCharacters(in: .whitespaces)
                     let page = String(title[range.upperBound...]).trimmingCharacters(in: .whitespaces)
                     if !site.isEmpty {
-                        return (site, page.isEmpty ? site : page)
+                        return (cleanSiteName(site), page.isEmpty ? site : page)
                     }
                 }
             }
         }
         
-        return (title, title)
+        return (cleanSiteName(title), title)
     }
     
     private var totalDurationSeconds: Int {
