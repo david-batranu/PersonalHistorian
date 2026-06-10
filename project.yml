@@ -22,7 +22,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.personalhistorian.app
         INFOPLIST_FILE: PersonalHistorian/Info.plist
         CODE_SIGN_ENTITLEMENTS: PersonalHistorian/PersonalHistorian.entitlements
-        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: FP8VJTX3S8
         CODE_SIGNING_ALLOWED: "YES"
         SWIFT_STRICT_CONCURRENCY: complete
         MACOSX_DEPLOYMENT_TARGET: "14.0"
